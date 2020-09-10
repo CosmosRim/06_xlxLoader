@@ -1,0 +1,7 @@
+#information of source data
+[oDbInfo]
+oDbUser = "mig"
+oDbPwd = "Zsmart*2018"
+oDbIp = "10.120.244.99"
+oDbPort = 11521
+oDbSid = "cc"
