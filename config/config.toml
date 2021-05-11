@@ -1,7 +1,31 @@
+#database type
+[DBType]
+DBType = "oracle"
+
+#max process of reloader
+[maxGoroutines]
+maxGo = 4
+
 #information of source data
-[oDbInfo]
-oDbUser = "mig"
-oDbPwd = "Zsmart*2018"
-oDbIp = "10.120.244.99"
-oDbPort = 11521
-oDbSid = "cc"
+[DbInfo]
+DBUser = "zhuyu"
+DBPwd = "zhuyu"
+DBIp = "127.0.0.1"
+DBPort = 49161 
+DBSid = "xe"
+
+#list of all excel files, and which sheet want to load into which table(table will be recreate)
+[tableList]
+list = [
+    ["table1","map1.xlsx","Sheet1"],
+    ["table2","map2.xlsx","Sheet1"]
+]
+
+#[tableList]
+#table1 = 'map1.xlsx'
+#[tableList]
+#table2 = 'map2.xlsx'
+#[tableList]
+#table3 = 'map3.xlsx'
+#[tableList]
+#table4 = 'map4.xlsx'
