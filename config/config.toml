@@ -1,10 +1,8 @@
 #database type
-[DBType]
 DBType = "oracle"
 
 #max process of reloader
-[maxGoroutines]
-maxGo = 4
+maxGoroutines = 16
 
 #information of source data
 [DbInfo]
@@ -18,14 +16,33 @@ DBSid = "xe"
 [tableList]
 list = [
     ["table1","map1.xlsx","Sheet1"],
-    ["table2","map2.xlsx","Sheet1"]
+    ["table2","map2.xlsx","Sheet1"],
+    ["table3","map3.xlsx","Sheet1"],
+    ["table4","map4.xlsx","Sheet1"],
+    ["table5","map5.xlsx","Sheet1"],
+    ["table6","map6.xlsx","Sheet1"],
+    ["table7","map7.xlsx","Sheet1"],
+    ["table8","map8.xlsx","Sheet1"],
+    ["table9","map9.xlsx","Sheet1"],
+    ["table10","map10.xlsx","Sheet1"],
+    ["table11","map11.xlsx","Sheet1"],
+    ["table12","map12.xlsx","Sheet1"],
+    ["table13","map13.xlsx","Sheet1"],
+    ["table14","map14.xlsx","Sheet1"],
+    ["table15","map15.xlsx","Sheet1"],
+    ["table16","map16.xlsx","Sheet1"],
+    ["table17","map17.xlsx","Sheet1"],
+    ["table18","map18.xlsx","Sheet1"],
+    ["table19","map19.xlsx","Sheet1"],
+    ["table20","map20.xlsx","Sheet1"],
+    ["table21","map21.xlsx","Sheet1"],
+    ["table22","map22.xlsx","Sheet1"],
+    ["table23","map23.xlsx","Sheet1"],
+    ["table24","map24.xlsx","Sheet1"],
+    ["table25","map25.xlsx","Sheet1"],
+    ["table26","map26.xlsx","Sheet1"],
+    ["table27","map27.xlsx","Sheet1"],
+    ["table28","map28.xlsx","Sheet1"],
+    ["table29","map29.xlsx","Sheet1"],
+    ["table30","map30.xlsx","Sheet1"]
 ]
-
-#[tableList]
-#table1 = 'map1.xlsx'
-#[tableList]
-#table2 = 'map2.xlsx'
-#[tableList]
-#table3 = 'map3.xlsx'
-#[tableList]
-#table4 = 'map4.xlsx'

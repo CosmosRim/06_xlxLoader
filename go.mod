@@ -1,4 +1,4 @@
-module 06_getXslx_ctMappingTable
+module 06_xlxLoader
 
 go 1.14
 

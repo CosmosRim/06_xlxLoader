@@ -4,6 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"runtime"
+	"sync"
 
 	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/BurntSushi/toml"
@@ -13,11 +17,14 @@ import (
 const cfgPath string = "./config/"
 const cfgFile string = "config.toml"
 const xlxPath string = "./xlsxFiles/"
+const logPath string = "./log/"
 
 //define structs to get info from config.toml
 type cfgInfo struct {
-	DB     DBInfo    `toml:"DBInfo"`
-	TbList TableList `toml:"tableList"`
+	DBType        string
+	MaxGoroutines int64
+	DB            DBInfo    `toml:"DBInfo"`
+	TbList        TableList `toml:"tableList"`
 }
 type DBInfo struct {
 	User string `toml:"DBUser"`
@@ -43,14 +50,14 @@ func getTomlInfo(file string, st *cfgInfo) {
 // }
 
 //get xlsx info and generate check/drop/create/insert sql
-func readExcel(cfg cfgInfo, name int) (string, string, string, string, string, int /* , int, int, int */) {
+func readExcel(cfg cfgInfo, name int) (string, string, string, string, string, int /*, int, int, int */) {
 	//open config.toml
 	// var cfg cfgInfo
 	// getTomlInfo(cfgFile, &cfg)
 	tbName := cfg.TbList.TableList[name][0]
 	xlxName := cfg.TbList.TableList[name][1]
 	xlxSheet := cfg.TbList.TableList[name][2]
-	f, err := excelize.OpenFile(xlxPath + "/" + xlxName)
+	f, err := excelize.OpenFile(xlxPath + xlxName)
 	if err != nil {
 		log.Println(err)
 	}
@@ -59,7 +66,7 @@ func readExcel(cfg cfgInfo, name int) (string, string, string, string, string, i
 	dtSql := fmt.Sprintf("drop table %s", tbName)
 
 	//get cell style
-	// style1 := f.GetCellStyle(cfg.TbList.TableList[name][2], "A2")
+	// style1 := f.GetCellFormula(cfg.TbList.TableList[name][2], "A2")
 	// style2 := f.GetCellStyle(cfg.TbList.TableList[name][2], "B2")
 	// style3 := f.GetCellStyle(cfg.TbList.TableList[name][2], "C2")
 
@@ -106,6 +113,18 @@ func readExcel(cfg cfgInfo, name int) (string, string, string, string, string, i
 }
 
 func main() {
+	//remove old log folder and create new one
+	if _, err := os.Stat(logPath); err == nil {
+		log.Println("Remove exists old folder : " + logPath)
+		os.RemoveAll(logPath)
+	}
+
+	if err := os.Mkdir(logPath, os.ModePerm); err != nil {
+		log.Println("Create log folder: " + logPath + " failed.")
+	} else {
+		log.Println("Create log folder: " + logPath + " succeed.")
+	}
+
 	//get dsn info
 	var cfg cfgInfo
 	getTomlInfo(cfgFile, &cfg)
@@ -123,65 +142,110 @@ func main() {
 	}
 	defer db.Close()
 
+	//start monitor of goroutines
+	go func() {
+		log.Println("pprof start")
+		fmt.Println(http.ListenAndServe(":12610", nil))
+	}()
+
+	//counter of success excels
+	var countXlx int64
+	//make a chan/tunnel to limit max multi goroutines
+	wg := &sync.WaitGroup{}
+	limiter := make(chan bool, cfg.MaxGoroutines)
+	//deal all excels in toml list
 	for tbNumber := 0; tbNumber < len(cfg.TbList.TableList); tbNumber++ {
-		tbName, ckSql, dtSql, ctSql, istSql, counts := readExcel(cfg, tbNumber)
+		wg.Add(1)
+		limiter <- true
 
-		//check current table exists in table or not
-		exists, err := db.Query(ckSql)
-		if err != nil {
-			log.Println(err)
-		}
-		var tmpExist uint8
-		for exists.Next() {
-			exists.Scan(&tmpExist)
-		}
-		defer exists.Close()
+		//use new variable to store number, or it will mixup in multiple goroutines
+		tbLopNum := tbNumber //use
 
-		if tmpExist == 1 {
-			drop, err := db.Query(dtSql)
+		go func() {
+			//sometimes run quickly again will leading oci connectiong close before goroutines finish, not clear reason yet.
+			defer wg.Done()
+			defer func() {
+				<-limiter
+			}()
+
+			//generate all sqls from excel
+			tbName, ckSql, dtSql, ctSql, istSql, countLines /* , st1, st2, st3 */ := readExcel(cfg, tbLopNum)
+
+			log.Println(tbName + " dealed")
+			// log.Printf("A: %d, B: %d, C: %d", st1, st2, st3)
+
+			//create log files and start a log object
+			logFileName := logPath + tbName + ".log"
+			if _, err := os.Stat(logFileName); err == nil {
+				//log.Println("Remove exists old log file: " + logFileName)
+				os.Remove(logFileName)
+			}
+
+			logFile, err := os.Create(logFileName)
+			if err != nil {
+				log.Fatalf("Create log file with error: %s", err)
+			}
+			defer logFile.Close()
+
+			logOb := log.New(logFile, "", log.LstdFlags)
+
+			//check current table exists in table or not
+			exists, err := db.Query(ckSql)
+			if err != nil {
+				logOb.Println(err)
+				// runtime.Goexit()
+			}
+			var tmpExist uint8
+			for exists.Next() {
+				exists.Scan(&tmpExist)
+			}
+			exists.Close()
+
+			//if table exist, drop first. Then recreate table and insert all values.
+			if tmpExist == 1 {
+				drop, err := db.Query(dtSql)
+				if err != nil {
+					logOb.Println(err)
+					// runtime.Goexit()
+				}
+				drop.Close()
+			}
+
+			create, err := db.Query(ctSql)
+			if err != nil {
+				logOb.Println(err)
+				runtime.Goexit()
+			}
+			create.Close()
+			logOb.Printf("table %s recreated", tbName)
+
+			insert, err := db.Query(istSql)
+			if err != nil {
+				logOb.Println(err)
+				runtime.Goexit()
+			}
+			insert.Close()
+			logOb.Printf("table %s inserted", tbName)
+
+			commit, err := db.Query("commit")
 			if err != nil {
 				log.Println(err)
 			}
-			defer drop.Close()
-		}
+			commit.Close()
 
-		create, err := db.Query(ctSql)
-		if err != nil {
-			log.Println(err)
-		}
-		defer create.Close()
-		log.Printf("table %s recreated", tbName)
+			logOb.Printf("%s finished, and %d records have been inserted.", tbName, countLines)
 
-		insert, err := db.Query(istSql)
-		if err != nil {
-			log.Println(err)
-		}
-		defer insert.Close()
-		log.Printf("table %s inserted", tbName)
+			// wg.Done()
+			// func() {
+			// 	<-limiter
+			// }()
+			runtime.Goexit()
+		}()
 
-		// insertSql := fmt.Sprintf("insert all ")
-		// for i := 2; i <= cols; i++ {
-		// 	v := f.GetCellValue("Sheet1", fmt.Sprintf("A%d", i))
-		// 	k := f.GetCellValue("Sheet1", fmt.Sprintf("B%d", i))
-		// 	if k != "" {
-		// 		insertSql += fmt.Sprintf("into mig_tmp_mappingIndustry values ('%s','%s',%d) ", k, v, i)
-		// 		counts++
-		// 	}
-		// }
-
-		// insertSql += fmt.Sprintf("select 1 from dual")
-		// insert, err := db.Query(insertSql)
-		// if err != nil {
-		// 	log.Println(err)
-		// }
-		// defer insert.Close()
-		commit, err := db.Query("commit")
-		if err != nil {
-			log.Println(err)
-		}
-		defer commit.Close()
-
-		log.Printf("%s finished, and %d records have been inserted.", tbName, counts)
+		countXlx++
 	}
 
+	wg.Wait()
+
+	log.Printf("All finished,  %d tables have been loaded.", countXlx)
 }
