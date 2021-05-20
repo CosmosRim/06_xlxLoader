@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/BurntSushi/toml"
@@ -93,7 +94,7 @@ func readExcel(cfg cfgInfo, name int) (string, string, string, string, string, i
 	}
 
 	count := 0
-	istSql := fmt.Sprintf("insert all \n")
+	istSql := "insert all \n"
 	for i := 1; i < len(rows); i++ {
 		for col, colCell := range rows[i] {
 			switch {
@@ -107,7 +108,7 @@ func readExcel(cfg cfgInfo, name int) (string, string, string, string, string, i
 		}
 		count++
 	}
-	istSql += fmt.Sprintf("select 1 from dual")
+	istSql += "select 1 from dual"
 
 	return tbName, ckSql, dtSql, ctSql, istSql, count /* , style1, style2, style3 */
 }
@@ -138,7 +139,7 @@ func main() {
 		panic(err)
 	}
 	if db == nil {
-		log.Println("db is nil")
+		log.Println("DB is nil")
 	}
 	defer db.Close()
 
@@ -149,7 +150,7 @@ func main() {
 	}()
 
 	//counter of success excels
-	var countXlx int64
+	var countXlx uint64
 	//make a chan/tunnel to limit max multi goroutines
 	wg := &sync.WaitGroup{}
 	limiter := make(chan bool, cfg.MaxGoroutines)
@@ -159,7 +160,7 @@ func main() {
 		limiter <- true
 
 		//use new variable to store number, or it will mixup in multiple goroutines
-		tbLopNum := tbNumber //use
+		tbLopNum := tbNumber
 
 		go func() {
 			//sometimes run quickly again will leading oci connectiong close before goroutines finish, not clear reason yet.
@@ -235,6 +236,9 @@ func main() {
 
 			logOb.Printf("%s finished, and %d records have been inserted.", tbName, countLines)
 
+			//use atomic action to count success number, in case some goroutine failed but also be counted
+			atomic.AddUint64(&countXlx, 1)
+
 			// wg.Done()
 			// func() {
 			// 	<-limiter
@@ -242,7 +246,7 @@ func main() {
 			runtime.Goexit()
 		}()
 
-		countXlx++
+		// countXlx++
 	}
 
 	wg.Wait()

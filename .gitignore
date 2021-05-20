@@ -1,5 +1,5 @@
 .DS_Store
-/.idea/
 /.vscode/
 /log/*.log
 *.out
+/06_xlxLoader*
